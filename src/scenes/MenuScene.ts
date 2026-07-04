@@ -21,22 +21,21 @@ export class MenuScene extends Phaser.Scene {
     this.wavesGraphics = this.add.graphics();
 
     // Title
-    const titleText = this.add.text(width / 2, height / 2 - 120, 'BOUNCE BOUND', {
-      fontFamily: 'Arial, Helvetica, sans-serif',
-      fontSize: '72px',
+    const titleText = this.add.text(width / 2, height / 2 - 80, 'BOUNCE BOUND', {
+      fontFamily: '"Space Grotesk", "Arial Black", sans-serif',
+      fontSize: '84px',
       fontStyle: 'bold',
       color: '#ffffff'
     });
     titleText.setOrigin(0.5);
-    titleText.setShadow(0, 6, '#7e3fc7', 8, true, true);
+    titleText.setShadow(0, 8, '#5b21b6', 12, true, true);
 
-    // Subtitle
-    const subtitleText = this.add.text(width / 2, height / 2 - 40, 'Elastic Momentum Platformer', {
-      fontFamily: 'Arial, Helvetica, sans-serif',
-      fontSize: '20px',
-      color: '#94a3b8'
-    });
-    subtitleText.setOrigin(0.5);
+    // Apply linear gradient to the title text
+    const gradient = titleText.context.createLinearGradient(0, 0, 0, titleText.height);
+    gradient.addColorStop(0, '#ffffff');
+    gradient.addColorStop(0.3, '#f3e8ff');
+    gradient.addColorStop(1, '#a78bfa');
+    titleText.setFill(gradient);
 
     // Fullscreen Button
     const fsButton = this.add.sprite(width - 45, 45, 'fullscreen_icon');
