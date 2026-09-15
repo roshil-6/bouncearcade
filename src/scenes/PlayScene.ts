@@ -15,7 +15,6 @@ export class PlayScene extends Phaser.Scene {
   private platformsGroup!: Phaser.Physics.Arcade.StaticGroup;
   private spikesGroup!: Phaser.Physics.Arcade.StaticGroup;
   private berriesGroup!: Phaser.Physics.Arcade.StaticGroup;
-  private shadowsGroup!: Phaser.GameObjects.Group;
 
   // Game Entities
   private player!: Phaser.GameObjects.Container;
@@ -27,16 +26,11 @@ export class PlayScene extends Phaser.Scene {
 
   // Controls
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
-  private wasdKeys!: {
-    W: Phaser.Input.Keyboard.Key;
-    A: Phaser.Input.Keyboard.Key;
-    S: Phaser.Input.Keyboard.Key;
-    D: Phaser.Input.Keyboard.Key;
-  };
+  private wasdKeys!: { W: Phaser.Input.Keyboard.Key; A: Phaser.Input.Keyboard.Key; S: Phaser.Input.Keyboard.Key; D: Phaser.Input.Keyboard.Key; };
 
   // Coyote time & Wall jumps
   private coyoteTimeCounter = 0;
-  private readonly coyoteTimeDuration = 160; // ms
+  private readonly coyoteTimeDuration = 160;
   private wallJumpLockTimer = 0;
   private isPlayerDead = false;
   private wasGroundedLastFrame = true;
@@ -50,100 +44,163 @@ export class PlayScene extends Phaser.Scene {
   private touchJumpTriggered = false;
 
   // UI elements
-  private levelText!: Phaser.GameObjects.Text;
   private collectedText!: Phaser.GameObjects.Text;
   private livesText!: Phaser.GameObjects.Text;
-  private uiHeaderBg!: Phaser.GameObjects.Graphics;
 
   // Particles
   private berryParticles!: Phaser.GameObjects.Particles.ParticleEmitter;
 
-  // Background decoration
-  private bgWaves!: Phaser.GameObjects.Graphics;
-  private bgTimer = 0;
+  // World size
+  private worldWidth = 1024;
 
-  // Levels database
-  private readonly LEVEL_MAPS = [
-    // Level 1: Introduction
+  // 5 Long scrolling levels — Red Ball style
+  // T = tile_grass top (ground surface), D = dirt, S = stone/steel tile, X = spike, B = berry, P = portal, @ = spawn
+  // Each row is 80 chars wide = 2560px; 24 rows tall = 768px
+  private readonly LEVEL_MAPS: string[][] = [
+    // ==========================================
+    // LEVEL 1 — Grassy Start (introductory run)
+    // ==========================================
     [
-      "................................",
-      "................................",
-      "................................",
-      "................................",
-      "................................",
-      "....B.....................B.....",
-      "....GGGG................GGGG....",
-      "................................",
-      ".................B..............",
-      "..............GGGGGG............",
-      "................................",
-      ".........GGGG........GGGG.......",
-      "................................",
-      ".....GGGG................GGGG...",
-      "................................",
-      "............B.......B...........",
-      "....@......GGG.....GGG......P...",
-      "....GG......................GG..",
-      "....DD..B................B..DD..",
-      "....DDGGGG.............GGGGDDD..",
-      "....DDDDDDXXXXXXXXXXXXXDDDDDDD..",
-      "....DDDDDDXXXXXXXXXXXXXDDDDDDD..",
-      "....DDDDDDXXXXXXXXXXXXXDDDDDDD..",
-      "....DDDDDDXXXXXXXXXXXXXDDDDDDD.."
+      "................................................................................",
+      "................................................................................",
+      "......B.....................................................B...................",
+      "......GGGG..............................................GGGG...................",
+      "................................................................................",
+      "...........B.......B..............B.................B.......B...............",
+      "...........GGGG..GGGG............GGGG...............GGGG..GGGG.........P.....",
+      "..............................................B..B...............B.....GGGGG..",
+      "....................................................GGGG.........GGGG.....DDDDD",
+      "................B...........B.......................................DDDDDDDDDDD",
+      "..........GGGGGGGG.....GGGGGGGG..................................................",
+      "..................................................................................",
+      ".....B...............................B.........B......................B........",
+      "...GGGG.....GGGG.....GGGG.......GGGG.......GGGG....GGGG.......GGGG.....GGGG.",
+      "................................................................................",
+      "...@............................................................................",
+      "GGGGGGGGGGGG...........GGGGGGGG.................GGGGGGGG.....GGGG.........GGGG",
+      "DDDDDDDDDDDD...........DDDDDDDD.................DDDDDDDD.....DDDD.........DDDD",
+      "DDDDDDDDDDDDXXXX...XXXXDDDDDDDDXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXDDDDXXXXXXXX..DDDD",
+      "DDDDDDDDDDDDDDDDXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX..DDDD",
+      "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
+      "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
+      "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
+      "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD"
     ],
-    // Level 2: Wall Jumps & Vertical Ascent (Modified to be slightly easier with safety platforms)
+    // ==========================================
+    // LEVEL 2 — Wall Jumper (vertical + walls)
+    // ==========================================
     [
-      "............................P...",
-      "..........................GGGG..",
-      "..........................DDDD..",
-      "....................B.....DDDD..",
-      "..................GGGG....DDDD..",
-      "..................DDDD....DDDD..",
-      "............B.....DDDD....DDDD..",
-      "..........GGGG....DDDD....DDDD..",
-      "..........DDDD....DDDD....DDDD..",
-      "....B.....DDDD....DDDD....DDDD..",
-      "..GGGG....DDDD..SSSS..SSSSDDDD..",
-      "..DDDD....DDDD....DDDD....DDDD..",
-      "..DDDD....DDDD....DDDD....DDDD..",
-      "..DDDD....DDDD....DDDD....DDDD..",
-      "..DDDD....DDDD....DDDD....DDDD..",
-      "..DDDD....DDDD....DDDD....DDDD..",
-      "..DDDD....DDDD............DDDD..",
-      "..DDDD....DDDD..B......B..DDDD..",
-      "..DDDD@...DDDD.GGGG..GGGG.DDDD..",
-      "..DDDDGG..DDDD.DDDD..DDDD.DDDD..",
-      "..DDDDDDXXDDDD.DDDD..DDDD.DDDD..",
-      "..DDDDDDXXDDDD.DDDD..DDDD.DDDD..",
-      "..DDDDDDXXDDDD.DDDD..DDDD.DDDD..",
-      "..DDDDDDXXDDDD.DDDD..DDDD.DDDD.."
+      "..............................................P..................................",
+      "............................................GGGGG................................",
+      "............................................DDDDD...............................B",
+      "............................................DDDDD...........................GGGGG",
+      "......B.....................................DDDDD...........................DDDDD",
+      "....GGGGG...................................DDDDD...........................DDDDD",
+      "....DDDDD..........B.....B..................DDDDD...........................DDDDD",
+      "....DDDDD........GGGGG.GGGGG................DDDDD...........................DDDDD",
+      "....DDDDD........DDDDDDDDDDD................DDDDD...........................DDDDD",
+      "....DDDDD........DDDDDDDDDDD..B.............DDDDD.....B.............B.....DDDDD",
+      "....DDDDD........DDDDDDDDDDD.GGGGG..........DDDDD...GGGGG.........GGGGG...DDDDD",
+      "....DDDDD...SSSS..DDDDDDDDDDD.DDDDD..........DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
+      "....DDDDD...SSSS..DDDDDDDDDDD.DDDDD..........DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
+      "....DDDDD...SSSS..DDDDDDDDDDD.DDDDD..........DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
+      "....DDDDD...........DDDDDD....DDDDD..........DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
+      "....DDDDD........B..DDDDDD..B.DDDDD..........DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
+      "....DDDDD......GGGG.DDDDDD.GG.DDDDD..........DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
+      "....DDDDD......DDDD.DDDDDD.DD.DDDDD..........DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
+      "....DDDDD@.....DDDD.DDDDDD.DD.DDDDD..........DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
+      "....DDDDDDG....DDDD.DDDDDD.DD.DDDDD..........DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
+      "....DDDDDDDDXXXX....DDDDDD....DDDDD..........DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
+      "....DDDDDDDDDDDDXXXXDDDDDDDDDDDDDDDDXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXD",
+      "....DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
+      "....DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD"
     ],
-    // Level 3: Stone Maze Obstacle Course (Modified to provide clear openings for boxes & C-shape portal frame)
+    // ==========================================
+    // LEVEL 3 — Stone Rush (mixed obstacles)
+    // ==========================================
     [
-      "................................",
-      "................................",
-      "................................",
-      "................................",
-      "................................",
-      ".........................SSS....",
-      "......B.........B.......P..S....",
-      "....S.S.S.....SSSSS......SSS....",
-      "....S...S.....S...S.............",
-      "....S.B.S.....S.B.S.............",
-      "....SSSSS.....S.S.S.............",
-      "................................",
-      "..........SSS.....SSS...........",
-      "..........S.S.....S.S...........",
-      "..........S.S.....S.S...........",
-      "..........S.S.....S.S...........",
-      "....@.....S.S.....S.S.......B...",
-      "....GG....S.S.....S.S......GGGG.",
-      "....DD....S.S.....S.S......DDDD.",
-      "....DDXXXXS.SXXXXXS.SXXXXXXDDDD.",
-      "....DDXXDDS.SXXDXXS.SXXDXXXDDDD.",
-      "....DDXXDDS.SXXDXXS.SXXDXXXDDDD.",
-      "....DDXXDDS.SXXDXXS.SXXDXXXDDDD.",
-      "....DDXXDDS.SXXDXXS.SXXDXXXDDDD."
+      "................................................................................",
+      "................................................................................",
+      "......B.......B.......B.......B.......B.......B.......B.......B.......B.......",
+      "......SSSS...SSSS...SSSS.....SSSS...SSSS.....SSSS...SSSS.....SSSS...SSSS....",
+      "................................................................................",
+      "...........B.....B.........B.....B.........B.....B.........B.....B...........",
+      ".........SSSS...SSSS.....SSSS...SSSS.....SSSS...SSSS.....SSSS...SSSS......P..",
+      "..............................................................................GGGGG",
+      "..............................................................................DDDDD",
+      "................B..........................................................B...DDDDD",
+      ".............SSSSSS...................................................SSSSSS...DDDDD",
+      "................................................................................DDDDD",
+      "....B.........................................................................B.DDDDD",
+      "..SSSS..SSSS..SSSS..SSSS..SSSS..SSSS..SSSS..SSSS..SSSS..SSSS..SSSS..SSSS..SSSS.DDDDD",
+      "................................................................................DDDDD",
+      "..@.............................................................................DDDDD",
+      "GGGGGGGGGGG...........GGGGG.................GGGGG.......GGGGG.......GGGGG.....GGGGG",
+      "DDDDDDDDDDD...........DDDDD.................DDDDD.......DDDDD.......DDDDD.....DDDDD",
+      "DDDDDDDDDDDXXXXXXXX...DDDDDXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX..DDDDD",
+      "DDDDDDDDDDDDDDDDDDDXXXDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
+      "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
+      "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
+      "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
+      "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD"
+    ],
+    // ==========================================
+    // LEVEL 4 — Sky Rush (long gap jumps, spikes)
+    // ==========================================
+    [
+      "................................................................................",
+      "................................................................................",
+      "..B.....B.....B.....B.....B.....B.....B.....B.....B.....B.....B.....B......P..",
+      "GGGG...GGGG..GGGG..GGGG..GGGG..GGGG..GGGG..GGGG..GGGG..GGGG..GGGG..GGGG..GGGG",
+      "DDDD...DDDD..DDDD..DDDD..DDDD..DDDD..DDDD..DDDD..DDDD..DDDD..DDDD..DDDD..DDDD",
+      "XXXX...XXXX..XXXX..XXXX..XXXX..XXXX..XXXX..XXXX..XXXX..XXXX..XXXX..XXXX..XXXX",
+      "................................................................................",
+      "................................................................................",
+      "..B..........B.........B..........B.........B..........B.........B.............",
+      ".SSSS.......SSSS......SSSS.......SSSS......SSSS.......SSSS......SSSS...........",
+      "..DDDD......DDDD......DDDD.......DDDD......DDDD.......DDDD......DDDD..........",
+      "...............................................................................",
+      ".....B................B................B................B......................",
+      "....GGGG............GGGG............GGGG............GGGG......................",
+      "....DDDD............DDDD............DDDD............DDDD......................",
+      "..@................................................................................",
+      "GGGGGGGG.........................................GGGGGGGG......................",
+      "DDDDDDDD.........................................DDDDDDDD......................",
+      "DDDDDDDDXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+      "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
+      "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
+      "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
+      "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
+      "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD"
+    ],
+    // ==========================================
+    // LEVEL 5 — Final Gauntlet
+    // ==========================================
+    [
+      "................................................................................",
+      "...B.....B.....B.....B.....B.....B.....B.....B.....B.....B.....B.....B.....B..",
+      "..SSSS..SSSS..SSSS..SSSS..SSSS..SSSS..SSSS..SSSS..SSSS..SSSS..SSSS..SSSS..SSSS",
+      "..DDDD..DDDD..DDDD..DDDD..DDDD..DDDD..DDDD..DDDD..DDDD..DDDD..DDDD..DDDD..DDDD",
+      "..XXXX..XXXX..XXXX..XXXX..XXXX..XXXX..XXXX..XXXX..XXXX..XXXX..XXXX..XXXX..XXXX",
+      "................................................................................",
+      "................................................................................",
+      "....B...........B...........B...........B...........B...........B..............P",
+      "..GGGGG.......GGGGG.......GGGGG.......GGGGG.......GGGGG.......GGGGG..........GGGGG",
+      "..DDDDD.......DDDDD.......DDDDD.......DDDDD.......DDDDD.......DDDDD..........DDDDD",
+      "....XXXX.........XXXX.........XXXX.........XXXX.........XXXX.........XXXX.....DDDDD",
+      "................................................................................DDDDD",
+      "...B............B............B............B............B............B..........DDDDD",
+      ".SSSS.........SSSS.........SSSS.........SSSS.........SSSS.........SSSS.......DDDDD",
+      ".DDDD.........DDDD.........DDDD.........DDDD.........DDDD.........DDDD.......DDDDD",
+      "..@.............................................................................DDDDD",
+      "GGGGGGG........GGGGG......GGGGG......GGGGG......GGGGG......GGGGG...........GGGGGDDDDD",
+      "DDDDDDD........DDDDD......DDDDD......DDDDD......DDDDD......DDDDD...........DDDDDDDDDD",
+      "DDDDDDDXXXXXXXXDDDDXXXXXXXXDDDDXXXXXXXXDDDDXXXXXXXXDDDDXXXXXXXXDDDDXXXXXXXXXXXXXXXXXXX",
+      "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
+      "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
+      "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
+      "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
+      "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD"
     ]
   ];
 
@@ -162,19 +219,22 @@ export class PlayScene extends Phaser.Scene {
   }
 
   create() {
-    const width = this.cameras.main.width;
     const height = this.cameras.main.height;
 
-    // Create background sky & sun
+    // Calculate world width from map columns
+    const map = this.LEVEL_MAPS[this.currentLevel - 1];
+    const tileSize = 32;
+    this.worldWidth = Math.max(...map.map(r => r.length)) * tileSize;
+
+    // Background (unified purple twilight for all levels)
     this.createBackground();
 
-    // Create groups
-    this.shadowsGroup = this.add.group();
+    // Groups
     this.platformsGroup = this.physics.add.staticGroup();
     this.spikesGroup = this.physics.add.staticGroup();
     this.berriesGroup = this.physics.add.staticGroup();
 
-    // Set up particles for collecting berries
+    // Berry particles
     this.berryParticles = this.add.particles(0, 0, 'berry', {
       lifespan: 450,
       speed: { min: 100, max: 280 },
@@ -184,31 +244,33 @@ export class PlayScene extends Phaser.Scene {
     });
     this.berryParticles.setDepth(15);
 
-    // Build the level map grid
+    // Build level
     this.buildLevelMap();
 
-    // Set up controls
+    // Camera follows player, world bounds = full map width
+    this.physics.world.setBounds(0, 0, this.worldWidth, height + 64);
+    this.cameras.main.setBounds(0, 0, this.worldWidth, height);
+    this.cameras.main.startFollow(this.player, true, 0.12, 0.12);
+
+    // Controls
     if (this.input.keyboard) {
       this.cursors = this.input.keyboard.createCursorKeys();
       this.wasdKeys = this.input.keyboard.addKeys('W,A,S,D') as any;
     }
 
-    // Set up Collisions
+    // Collisions
     this.physics.add.collider(this.player, this.platformsGroup);
     this.physics.add.overlap(this.player, this.spikesGroup, this.onPlayerHitSpike, undefined, this);
     this.physics.add.overlap(this.player, this.berriesGroup, this.onPlayerCollectBerry, undefined, this);
     this.physics.add.overlap(this.player, this.portal, this.onPlayerReachPortal, () => this.portalActive, this);
 
-    // Set game bounds Y to trigger death if player falls
-    this.physics.world.setBounds(0, 0, width, height + 64);
-
-    // Create UI overlay
+    // UI (fixed to camera)
     this.createUIHeader();
 
-    // Create tutorial hints
+    // Tutorial
     this.createTutorialHints();
 
-    // Create mobile controls if on mobile device or touch device
+    // Mobile controls
     const isMobileOrTouch = !this.sys.game.device.os.desktop || this.sys.game.device.input.touch;
     if (isMobileOrTouch) {
       this.createMobileControls();
@@ -216,75 +278,67 @@ export class PlayScene extends Phaser.Scene {
   }
 
   private createBackground() {
-    const width = this.cameras.main.width;
-    const height = this.cameras.main.height;
+    const W = this.worldWidth;
+    const H = this.cameras.main.height;
 
-    const bg = this.add.graphics();
-    if (this.currentLevel === 1) {
-      bg.fillGradientStyle(0x0284c7, 0x0284c7, 0x075985, 0x075985, 1);
-    } else if (this.currentLevel === 2) {
-      bg.fillGradientStyle(0x065f46, 0x065f46, 0x047857, 0x047857, 1);
-    } else {
-      bg.fillGradientStyle(0x581c87, 0x581c87, 0x3b0764, 0x3b0764, 1);
+    // Unified purple twilight background across full world width
+    const bg = this.add.graphics().setDepth(0).setScrollFactor(0);
+    // Draw it at camera size (parallax fixed)
+    bg.fillGradientStyle(0x0d0025, 0x0d0025, 0x1a0a4e, 0x1a0a4e, 1);
+    bg.fillRect(0, 0, 1024, H * 0.4);
+    bg.fillGradientStyle(0x1a0a4e, 0x1a0a4e, 0x311b92, 0x311b92, 1);
+    bg.fillRect(0, H * 0.35, 1024, H * 0.65);
+
+    // Moon glow (fixed to camera)
+    const moon = this.add.graphics().setDepth(1).setScrollFactor(0);
+    const mx = 512, my = 120, mr = 65;
+    for (let i = 5; i >= 1; i--) {
+      moon.fillStyle(0xd0e8ff, 0.04 * i);
+      moon.fillCircle(mx, my, mr + i * 14);
     }
-    bg.fillRect(0, 0, width, height);
+    moon.fillStyle(0xdce8ff, 0.2); moon.fillCircle(mx, my, mr);
+    moon.fillStyle(0xf0f6ff, 0.6); moon.fillCircle(mx, my, mr * 0.55);
+    moon.fillStyle(0xfcfeff, 0.85); moon.fillCircle(mx, my, mr * 0.28);
 
-    // Moon/Sun
-    const sun = this.add.graphics();
-    sun.fillStyle(0xffffff, 0.1);
-    sun.fillCircle(width / 2, 140, 75);
-    sun.fillStyle(0xffffff, 0.25);
-    sun.fillCircle(width / 2, 140, 50);
-
-    // Draw background stars/dust
-    for (let i = 0; i < 24; i++) {
-      const star = this.add.graphics();
-      star.fillStyle(0xffffff, Phaser.Math.FloatBetween(0.2, 0.6));
-      star.fillCircle(
-        Phaser.Math.Between(10, width - 10),
-        Phaser.Math.Between(10, height / 2 + 100),
-        Phaser.Math.Between(1, 3.5)
-      );
+    // Stars (fixed to camera)
+    const stars = this.add.graphics().setDepth(1).setScrollFactor(0);
+    for (let i = 0; i < 45; i++) {
+      stars.fillStyle(0xffffff, Math.random() * 0.5 + 0.15);
+      stars.fillCircle(Math.random() * 1024, Math.random() * H * 0.55, Math.random() * 2 + 0.5);
     }
 
-    this.bgWaves = this.add.graphics();
-    this.drawBgWaves();
-  }
-
-  private drawBgWaves() {
-    this.bgWaves.clear();
-    const width = this.cameras.main.width;
-    const height = this.cameras.main.height;
-
-    // Curved layered clouds or rolling vectors
-    this.bgWaves.fillStyle(0xffffff, 0.05);
-    this.bgWaves.beginPath();
-    this.bgWaves.moveTo(0, height);
-    for (let x = 0; x <= width; x += 16) {
-      const y = height - 200 + Math.sin(x * 0.002 + this.bgTimer) * 45;
-      this.bgWaves.lineTo(x, y);
+    // Scrolling mountain silhouettes (parallax 0.3 scroll)
+    const mountains = this.add.graphics().setDepth(2).setScrollFactor(0.3);
+    mountains.fillStyle(0x1a1040, 1);
+    mountains.beginPath();
+    const mpts = [0,0,0.1,-0.15,0.2,-0.1,0.3,-0.25,0.4,-0.12,0.5,-0.3,0.6,-0.18,0.7,-0.28,0.8,-0.1,0.9,-0.2,1,0];
+    for (let i = 0; i < mpts.length; i += 2) {
+      const x = mpts[i] * W * 3; const y = H * 0.65 + mpts[i+1] * H * 0.4;
+      if (i === 0) mountains.moveTo(x, y); else mountains.lineTo(x, y);
     }
-    this.bgWaves.lineTo(width, height);
-    this.bgWaves.closePath();
-    this.bgWaves.fill();
+    mountains.lineTo(W * 3, H); mountains.lineTo(0, H); mountains.closePath(); mountains.fill();
 
-    this.bgWaves.fillStyle(0xffffff, 0.03);
-    this.bgWaves.beginPath();
-    this.bgWaves.moveTo(0, height);
-    for (let x = 0; x <= width; x += 16) {
-      const y = height - 250 + Math.cos(x * 0.003 - this.bgTimer * 1.5) * 35;
-      this.bgWaves.lineTo(x, y);
+    // Closer mountain layer (parallax 0.5)
+    const mountains2 = this.add.graphics().setDepth(3).setScrollFactor(0.5);
+    mountains2.fillStyle(0x241455, 1);
+    mountains2.beginPath();
+    const mpts2 = [0,0,0.08,-0.1,0.16,-0.07,0.25,-0.18,0.34,-0.09,0.43,-0.2,0.52,-0.11,0.61,-0.18,0.7,-0.07,0.8,-0.14,0.9,-0.09,1,0];
+    for (let i = 0; i < mpts2.length; i += 2) {
+      const x = mpts2[i] * W * 3; const y = H * 0.72 + mpts2[i+1] * H * 0.35;
+      if (i === 0) mountains2.moveTo(x, y); else mountains2.lineTo(x, y);
     }
-    this.bgWaves.lineTo(width, height);
-    this.bgWaves.closePath();
-    this.bgWaves.fill();
+    mountains2.lineTo(W * 3, H); mountains2.lineTo(0, H); mountains2.closePath(); mountains2.fill();
+
+    // Ground mist (parallax 0.8)
+    const mist = this.add.graphics().setDepth(3).setScrollFactor(0.8);
+    mist.fillStyle(0x3d1f7a, 0.35);
+    mist.fillRect(0, H * 0.8, W * 2, H * 0.2);
   }
 
   private buildLevelMap() {
     const map = this.LEVEL_MAPS[this.currentLevel - 1];
     const tileSize = 32;
 
-    // Render loop
     for (let row = 0; row < map.length; row++) {
       const rowString = map[row];
       for (let col = 0; col < rowString.length; col++) {
@@ -299,60 +353,37 @@ export class PlayScene extends Phaser.Scene {
         } else if (char === 'S') {
           this.createTilePlatform(x, y, 'tile_stone');
         } else if (char === 'X') {
-          // Sharp spike
           const spike = this.spikesGroup.create(x, y, 'spike');
           spike.setDepth(10);
-          // Set smaller hitbox for spikes too, for more forgiving gameplay
           spike.body.setSize(20, 20).setOffset(6, 12);
         } else if (char === 'B') {
-          // Berry collectible
           const berry = this.berriesGroup.create(x, y, 'berry');
           berry.setDepth(8);
           this.totalCollectibles++;
-          
-          // Gentle hovering animation for collectibles
           this.tweens.add({
             targets: berry,
-            y: y - 5,
+            y: y - 6,
             duration: 1000 + Math.random() * 500,
             yoyo: true,
             repeat: -1,
             ease: 'Sine.InOut'
           });
-        } else if (char === '?') {
-          // Sign
-          const sign = this.add.sprite(x, y, 'sign');
-          sign.setDepth(6);
         } else if (char === 'P') {
-          // Portal
           this.portal = this.add.sprite(x, y, 'portal');
           this.portal.setDepth(5);
           this.physics.add.existing(this.portal, true);
-          this.portal.alpha = 0.25; // Portal is dimmed until all berries are gathered
-
-          // Swirl rotation
-          this.tweens.add({
-            targets: this.portal,
-            angle: 360,
-            duration: 4000,
-            repeat: -1,
-            ease: 'Linear'
-          });
-
-          // Portal Lock Indicator text
-          this.portalLabel = this.add.text(x, y - 48, '', {
+          this.portal.alpha = 0.25;
+          this.tweens.add({ targets: this.portal, angle: 360, duration: 4000, repeat: -1, ease: 'Linear' });
+          this.portalLabel = this.add.text(x, y - 52, '', {
             fontFamily: 'Arial, Helvetica, sans-serif',
             fontSize: '11px',
             fontStyle: 'bold',
             color: '#ff3366',
             backgroundColor: '#0a0f1d',
             padding: { x: 6, y: 3 }
-          }).setOrigin(0.5).setDepth(15);
-          this.portalLabel.setStroke('#1e293b', 2);
-          
+          }).setOrigin(0.5).setDepth(15).setStroke('#1e293b', 2);
           this.updatePortalLabel();
         } else if (char === '@') {
-          // Player spawning
           this.createPlayer(x, y);
         }
       }
@@ -360,398 +391,200 @@ export class PlayScene extends Phaser.Scene {
   }
 
   private createTilePlatform(x: number, y: number, key: string) {
-    // 1. Shadow: Offset 16px down, 12px right, black color, alpha 0.25 on a lower Z-layer
-    const shadow = this.add.sprite(x + 12, y + 16, key);
-    shadow.setTint(0x000000);
-    shadow.setAlpha(0.25);
-    shadow.setDepth(2);
-    this.shadowsGroup.add(shadow);
-
-    // 2. Main Platform
+    const shadow = this.add.sprite(x + 10, y + 14, key);
+    shadow.setTint(0x000000).setAlpha(0.2).setDepth(2);
     const platform = this.platformsGroup.create(x, y, key);
     platform.setDepth(4);
   }
 
   private createPlayer(x: number, y: number) {
-    // Create player container (stores visual and holds physical body)
     this.player = this.add.container(x, y);
     this.player.setDepth(12);
-
-    // Visual body representing the player inside the container
     this.playerBodySprite = this.add.sprite(0, 0, 'hero_body');
     this.playerBodySprite.setOrigin(0.5, 0.5);
     this.player.add(this.playerBodySprite);
-
-    // Visual eyes/face overlay positioned at the top-third of the body
     this.playerFaceSprite = this.add.sprite(0, 0, 'hero_face');
     this.playerFaceSprite.setOrigin(0.5, 0.5);
     this.player.add(this.playerFaceSprite);
-
-    // Enable physics on the container
     this.physics.add.existing(this.player);
-
-    // Setup forgiving collision hitbox: visual size is 40x60, body size set to 24x42
     const body = this.player.body as Phaser.Physics.Arcade.Body;
-    body.setSize(24, 42);
-    body.setOffset(-12, -21); // Center container offset
+    body.setSize(24, 42).setOffset(-12, -21);
     body.setCollideWorldBounds(true);
   }
 
   private createUIHeader() {
-    const width = this.cameras.main.width;
+    const W = this.cameras.main.width;
 
-    this.uiHeaderBg = this.add.graphics();
-    this.uiHeaderBg.fillStyle(0x0f172a, 0.65);
-    this.uiHeaderBg.fillRoundedRect(16, 12, width - 32, 50, 12);
-    this.uiHeaderBg.lineStyle(2, 0xffffff, 0.15);
-    this.uiHeaderBg.strokeRoundedRect(16, 12, width - 32, 50, 12);
-    this.uiHeaderBg.setDepth(20);
+    const headerBg = this.add.graphics().setDepth(20).setScrollFactor(0);
+    headerBg.fillStyle(0x0d0030, 0.75);
+    headerBg.fillRoundedRect(12, 8, W - 24, 50, 10);
+    headerBg.lineStyle(1.5, 0x7e3fc7, 0.5);
+    headerBg.strokeRoundedRect(12, 8, W - 24, 50, 10);
 
-    const textStyle = {
-      fontFamily: 'Arial, Helvetica, sans-serif',
-      fontSize: '20px',
-      fontStyle: 'bold',
-      color: '#ffffff'
-    };
+    const ts = { fontFamily: '"Space Grotesk", Arial, sans-serif', fontSize: '18px', fontStyle: 'bold', color: '#ffffff' };
 
-    this.levelText = this.add.text(40, 25, `LEVEL 0${this.currentLevel}`, textStyle);
-    this.levelText.setDepth(21);
+    this.add.text(36, 22, `LVL ${this.currentLevel}`, ts).setDepth(21).setScrollFactor(0);
+    this.collectedText = this.add.text(W / 2, 22, `🍓 ${this.collectedCount}/${this.totalCollectibles}`, ts).setOrigin(0.5, 0).setDepth(21).setScrollFactor(0);
+    this.livesText = this.add.text(W - 90, 22, `❤️ ×${this.lives}`, { ...ts, color: '#ff6688' }).setOrigin(1, 0).setDepth(21).setScrollFactor(0);
 
-    this.collectedText = this.add.text(
-      width / 2,
-      25,
-      `COLLECTED: ${this.collectedCount}/${this.totalCollectibles}`,
-      textStyle
-    ).setOrigin(0.5, 0.0);
-    this.collectedText.setDepth(21);
-
-    this.livesText = this.add.text(
-      width - 85,
-      25,
-      `❤️ LIVES: ${this.lives}`,
-      { ...textStyle, color: '#ff3366' }
-    ).setOrigin(1.0, 0.0);
-    this.livesText.setDepth(21);
-
-    // Fullscreen Toggle Button inside Header
-    const fsButton = this.add.sprite(width - 45, 37, 'fullscreen_icon');
-    fsButton.setOrigin(0.5);
-    fsButton.setDepth(22);
-    fsButton.setInteractive({ useHandCursor: true });
-    
-    fsButton.on('pointerdown', () => {
+    // Fullscreen button
+    const fsBtn = this.add.sprite(W - 44, 33, 'fullscreen_icon').setOrigin(0.5).setDepth(22).setScrollFactor(0);
+    fsBtn.setInteractive({ useHandCursor: true });
+    fsBtn.on('pointerdown', () => {
       if (this.scale.isFullscreen) {
         this.scale.stopFullscreen();
-        try {
-          if (window.screen && window.screen.orientation && (window.screen.orientation as any).unlock) {
-            (window.screen.orientation as any).unlock();
-          }
-        } catch (e) {}
+        try { (window.screen.orientation as any).unlock?.(); } catch {}
       } else {
         this.scale.startFullscreen();
-        try {
-          if (window.screen && window.screen.orientation && (window.screen.orientation as any).lock) {
-            (window.screen.orientation as any).lock('landscape').catch(() => {});
-          }
-        } catch (e) {}
+        try { (window.screen.orientation as any).lock?.('landscape').catch(() => {}); } catch {}
       }
     });
-    
-    fsButton.on('pointerover', () => fsButton.setScale(1.15));
-    fsButton.on('pointerout', () => fsButton.setScale(1.0));
+    fsBtn.on('pointerover', () => fsBtn.setScale(1.15));
+    fsBtn.on('pointerout', () => fsBtn.setScale(1.0));
   }
 
   update(time: number) {
     if (this.isPlayerDead) return;
 
-    this.bgTimer += 0.002;
-    this.drawBgWaves();
-
     const body = this.player.body as Phaser.Physics.Arcade.Body;
 
-    // Coyote Time Counter Update
+    // Coyote time
     if (body.blocked.down) {
       this.coyoteTimeCounter = time + this.coyoteTimeDuration;
     }
 
-    // Ground landing squash detection
-    const isCurrentlyGrounded = body.blocked.down;
-    if (isCurrentlyGrounded && !this.wasGroundedLastFrame && body.velocity.y >= 0) {
-      // Just landed! Trigger squish (squash body and face together)
+    // Landing squash
+    const grounded = body.blocked.down;
+    if (grounded && !this.wasGroundedLastFrame && body.velocity.y >= 0) {
       this.tweens.add({
         targets: [this.playerBodySprite, this.playerFaceSprite],
-        scaleX: 1.35,
-        scaleY: 0.65,
-        duration: 120,
-        yoyo: true,
-        ease: 'Cubic.Out'
+        scaleX: 1.35, scaleY: 0.65, duration: 120, yoyo: true, ease: 'Cubic.Out'
       });
     }
-    this.wasGroundedLastFrame = isCurrentlyGrounded;
+    this.wasGroundedLastFrame = grounded;
 
-    // Movement checks
-    let moveLeft = (this.cursors && (this.cursors.left.isDown || this.wasdKeys.A.isDown)) || this.isTouchingLeft;
-    let moveRight = (this.cursors && (this.cursors.right.isDown || this.wasdKeys.D.isDown)) || this.isTouchingRight;
-    let jumpPressed = (this.cursors && (Phaser.Input.Keyboard.JustDown(this.cursors.space) || 
-                       Phaser.Input.Keyboard.JustDown(this.cursors.up) || 
-                       Phaser.Input.Keyboard.JustDown(this.wasdKeys.W))) ||
-                       this.touchJumpTriggered;
-
-    // Reset touchJumpTriggered immediately so it only counts for one frame
+    // Input
+    const moveLeft = (this.cursors && (this.cursors.left.isDown || this.wasdKeys.A.isDown)) || this.isTouchingLeft;
+    const moveRight = (this.cursors && (this.cursors.right.isDown || this.wasdKeys.D.isDown)) || this.isTouchingRight;
+    const jumpPressed = (this.cursors && (
+      Phaser.Input.Keyboard.JustDown(this.cursors.space) ||
+      Phaser.Input.Keyboard.JustDown(this.cursors.up) ||
+      Phaser.Input.Keyboard.JustDown(this.wasdKeys.W)
+    )) || this.touchJumpTriggered;
     this.touchJumpTriggered = false;
 
-    if (this.wallJumpLockTimer > time) {
-      // Input is locked due to wall jump momentum
-      return;
-    }
+    if (this.wallJumpLockTimer > time) return;
 
-    // Horizontal Acceleration logic
+    // Movement
     if (moveLeft) {
       body.setAccelerationX(-1200);
-      if (body.velocity.x > 0) {
-        body.setVelocityX(body.velocity.x * 0.9); // Quick turn friction
-      }
+      if (body.velocity.x > 0) body.setVelocityX(body.velocity.x * 0.9);
       body.setMaxVelocity(320, 1000);
-
-      // Shifting eyes left and tilt body
-      this.playerFaceSprite.x = -3;
-      this.playerFaceSprite.y = 0;
-      this.playerBodySprite.setAngle(-6);
-      this.playerFaceSprite.setAngle(-6);
+      this.playerFaceSprite.x = -3; this.playerFaceSprite.y = 0;
+      this.playerBodySprite.setAngle(-6); this.playerFaceSprite.setAngle(-6);
     } else if (moveRight) {
       body.setAccelerationX(1200);
-      if (body.velocity.x < 0) {
-        body.setVelocityX(body.velocity.x * 0.9); // Quick turn friction
-      }
+      if (body.velocity.x < 0) body.setVelocityX(body.velocity.x * 0.9);
       body.setMaxVelocity(320, 1000);
-
-      // Shifting eyes right and tilt body
-      this.playerFaceSprite.x = 3;
-      this.playerFaceSprite.y = 0;
-      this.playerBodySprite.setAngle(6);
-      this.playerFaceSprite.setAngle(6);
+      this.playerFaceSprite.x = 3; this.playerFaceSprite.y = 0;
+      this.playerBodySprite.setAngle(6); this.playerFaceSprite.setAngle(6);
     } else {
       body.setAccelerationX(0);
-      // Crisp ground deceleration damping
       body.setVelocityX(body.velocity.x * 0.82);
-
-      // Centered eyes and upright body
-      this.playerFaceSprite.x = 0;
-      this.playerFaceSprite.y = 0;
-      this.playerBodySprite.setAngle(0);
-      this.playerFaceSprite.setAngle(0);
+      this.playerFaceSprite.x = 0; this.playerFaceSprite.y = 0;
+      this.playerBodySprite.setAngle(0); this.playerFaceSprite.setAngle(0);
     }
 
-    // Dynamic eyes look up/down when jumping/falling
-    if (body.velocity.y < -50) {
-      this.playerFaceSprite.y = -3; // Shifting face upwards
-    } else if (body.velocity.y > 50) {
-      this.playerFaceSprite.y = 3; // Shifting face downwards
-    }
+    // Eye look
+    if (body.velocity.y < -50) this.playerFaceSprite.y = -3;
+    else if (body.velocity.y > 50) this.playerFaceSprite.y = 3;
 
-    // Wall Jump & Regular Jump triggers
+    // Jump
     if (jumpPressed) {
       if (body.blocked.down || time <= this.coyoteTimeCounter) {
-        // Regular Jump
         body.setVelocityY(-560);
-        this.coyoteTimeCounter = 0; // Reset coyote time
-        
-        // Jump stretch animation (body and face)
+        this.coyoteTimeCounter = 0;
         this.tweens.add({
           targets: [this.playerBodySprite, this.playerFaceSprite],
-          scaleX: 0.7,
-          scaleY: 1.35,
-          duration: 100,
-          yoyo: true,
-          ease: 'Cubic.Out'
+          scaleX: 0.7, scaleY: 1.35, duration: 100, yoyo: true, ease: 'Cubic.Out'
         });
-      } else if (!body.blocked.down) {
-        // Wall bounce jumps (Left or Right wall contact)
+      } else {
         if (body.blocked.left) {
-          body.setVelocityY(-480);
-          body.setVelocityX(340);
-          this.wallJumpLockTimer = time + 160; // Lock inputs slightly
-
-          this.tweens.add({
-            targets: [this.playerBodySprite, this.playerFaceSprite],
-            scaleX: 0.7,
-            scaleY: 1.35,
-            duration: 100,
-            yoyo: true,
-            ease: 'Cubic.Out'
-          });
+          body.setVelocityY(-480); body.setVelocityX(340);
+          this.wallJumpLockTimer = time + 160;
+          this.tweens.add({ targets: [this.playerBodySprite, this.playerFaceSprite], scaleX: 0.7, scaleY: 1.35, duration: 100, yoyo: true, ease: 'Cubic.Out' });
         } else if (body.blocked.right) {
-          body.setVelocityY(-480);
-          body.setVelocityX(-340);
-          this.wallJumpLockTimer = time + 160; // Lock inputs slightly
-
-          this.tweens.add({
-            targets: [this.playerBodySprite, this.playerFaceSprite],
-            scaleX: 0.7,
-            scaleY: 1.35,
-            duration: 100,
-            yoyo: true,
-            ease: 'Cubic.Out'
-          });
+          body.setVelocityY(-480); body.setVelocityX(-340);
+          this.wallJumpLockTimer = time + 160;
+          this.tweens.add({ targets: [this.playerBodySprite, this.playerFaceSprite], scaleX: 0.7, scaleY: 1.35, duration: 100, yoyo: true, ease: 'Cubic.Out' });
         }
       }
     }
 
-    // Check bottom death bounds
-    if (this.player.y > this.cameras.main.height + 32) {
+    // Bottom death
+    if (this.player.y > this.cameras.main.scrollY + this.cameras.main.height + 32) {
       this.handleDeath();
     }
   }
 
-  private onPlayerHitSpike() {
-    this.handleDeath();
-  }
+  private onPlayerHitSpike() { this.handleDeath(); }
 
   private onPlayerCollectBerry(_playerObj: any, berryObj: any) {
     const berry = berryObj as Phaser.Physics.Arcade.Sprite;
-    
-    // Check if berry is already inactive to prevent double-trigger
     if (!berry.active) return;
-    
-    // Disable berry body
     berry.disableBody(true, true);
-
-    // Particle burst
     this.berryParticles.emitParticleAt(berry.x, berry.y, 15);
-
-    // Increment count
     this.collectedCount++;
-    this.collectedText.setText(`COLLECTED: ${this.collectedCount}/${this.totalCollectibles}`);
-
-    // Create a glowing energy dot that flies into the portal
-    const energyDot = this.add.graphics();
-    energyDot.fillStyle(0x00ffff, 1);
-    energyDot.fillCircle(0, 0, 6);
-    energyDot.x = berry.x;
-    energyDot.y = berry.y;
-    energyDot.setDepth(15);
-    
-    energyDot.lineStyle(2, 0xffffff, 0.8);
-    energyDot.strokeCircle(0, 0, 6);
-
+    this.collectedText.setText(`🍓 ${this.collectedCount}/${this.totalCollectibles}`);
+    const dot = this.add.graphics();
+    dot.fillStyle(0x00ffff, 1); dot.fillCircle(0, 0, 6);
+    dot.lineStyle(2, 0xffffff, 0.8); dot.strokeCircle(0, 0, 6);
+    dot.x = berry.x; dot.y = berry.y; dot.setDepth(15);
     this.tweens.add({
-      targets: energyDot,
-      x: this.portal.x,
-      y: this.portal.y,
-      duration: 650,
-      ease: 'Quad.In',
+      targets: dot, x: this.portal.x, y: this.portal.y, duration: 650, ease: 'Quad.In',
       onComplete: () => {
-        energyDot.destroy();
-        
-        // Spawn mini burst at portal
+        dot.destroy();
         this.berryParticles.emitParticleAt(this.portal.x, this.portal.y, 8);
-        
-        // Pulse the portal visual
-        this.tweens.add({
-          targets: this.portal,
-          scaleX: 1.4,
-          scaleY: 1.4,
-          duration: 100,
-          yoyo: true,
-          ease: 'Cubic.Out'
-        });
-
-        // Check if all collected to open the portal
-        if (this.collectedCount >= this.totalCollectibles) {
-          this.activatePortal();
-        }
-        
+        this.tweens.add({ targets: this.portal, scaleX: 1.4, scaleY: 1.4, duration: 100, yoyo: true, ease: 'Cubic.Out' });
+        if (this.collectedCount >= this.totalCollectibles) this.activatePortal();
         this.updatePortalLabel();
       }
     });
-
-    // Bounce UI text on collection
-    this.tweens.add({
-      targets: this.collectedText,
-      scaleX: 1.2,
-      scaleY: 1.2,
-      duration: 100,
-      yoyo: true,
-      ease: 'Cubic.Out'
-    });
+    this.tweens.add({ targets: this.collectedText, scaleX: 1.2, scaleY: 1.2, duration: 100, yoyo: true, ease: 'Cubic.Out' });
   }
 
   private activatePortal() {
     this.portalActive = true;
-    
-    // Animate portal opening glow and speed
-    this.tweens.add({
-      targets: this.portal,
-      alpha: 1.0,
-      scaleX: 1.2,
-      scaleY: 1.2,
-      duration: 500,
-      yoyo: true,
-      repeat: 1,
-      ease: 'Back.Out'
-    });
-
-    // Spin faster
-    this.tweens.add({
-      targets: this.portal,
-      angle: 360,
-      duration: 1000,
-      repeat: -1,
-      ease: 'Linear'
-    });
+    this.tweens.add({ targets: this.portal, alpha: 1.0, scaleX: 1.2, scaleY: 1.2, duration: 500, yoyo: true, repeat: 1, ease: 'Back.Out' });
+    this.tweens.add({ targets: this.portal, angle: 360, duration: 1000, repeat: -1, ease: 'Linear' });
   }
 
   private onPlayerReachPortal() {
     if (this.isPlayerDead) return;
-
     this.isPlayerDead = true;
     const body = this.player.body as Phaser.Physics.Arcade.Body;
     body.setEnable(false);
-
-    // Cyan flash
     this.cameras.main.flash(400, 0, 255, 255);
 
-    // Stage Clear popup text overlay
-    const width = this.cameras.main.width;
-    const height = this.cameras.main.height;
-    
-    const clearPanel = this.add.graphics();
-    clearPanel.fillStyle(0x0f172a, 0.65);
-    clearPanel.fillRect(0, 0, width, height);
-    clearPanel.setDepth(50);
-    
-    const clearText = this.add.text(width / 2, height / 2, 'STAGE CLEAR!', {
-      fontFamily: 'Arial, Helvetica, sans-serif',
-      fontSize: '64px',
-      fontStyle: 'bold',
-      color: '#00ffff'
-    }).setOrigin(0.5).setDepth(51);
-    clearText.setShadow(0, 6, '#7e3fc7', 8, true, true);
-    clearText.setScale(0);
+    const W = this.cameras.main.width;
+    const H = this.cameras.main.height;
 
-    this.tweens.add({
-      targets: clearText,
-      scaleX: 1,
-      scaleY: 1,
-      duration: 500,
-      ease: 'Back.Out'
-    });
+    const panel = this.add.graphics().setDepth(50).setScrollFactor(0);
+    panel.fillStyle(0x0d0025, 0.7);
+    panel.fillRect(0, 0, W, H);
 
-    // Portal absorption animation (spin and shrink player body/face)
+    const clearText = this.add.text(W / 2, H / 2, 'STAGE CLEAR! 🎉', {
+      fontFamily: '"Space Grotesk", "Arial Black", sans-serif',
+      fontSize: '60px', fontStyle: 'bold', color: '#00ffff',
+      stroke: '#003366', strokeThickness: 6,
+    }).setOrigin(0.5).setDepth(51).setScrollFactor(0).setScale(0);
+
+    this.tweens.add({ targets: clearText, scaleX: 1, scaleY: 1, duration: 500, ease: 'Back.Out' });
     this.tweens.add({
       targets: this.player,
-      x: this.portal.x,
-      y: this.portal.y,
-      scaleX: 0,
-      scaleY: 0,
-      angle: 720,
-      duration: 800,
-      ease: 'Cubic.In',
-      onComplete: () => {
-        clearPanel.destroy();
-        clearText.destroy();
-        this.advanceLevel();
-      }
+      x: this.portal.x, y: this.portal.y,
+      scaleX: 0, scaleY: 0, angle: 720, duration: 800, ease: 'Cubic.In',
+      onComplete: () => { panel.destroy(); clearText.destroy(); this.advanceLevel(); }
     });
   }
 
@@ -759,193 +592,100 @@ export class PlayScene extends Phaser.Scene {
     if (this.currentLevel < this.LEVEL_MAPS.length) {
       this.scene.restart({ level: this.currentLevel + 1, lives: this.lives });
     } else {
-      // Game Won overlay
-      const width = this.cameras.main.width;
-      const height = this.cameras.main.height;
-
-      const winPanel = this.add.graphics();
-      winPanel.fillStyle(0x0f172a, 0.9);
-      winPanel.fillRect(0, 0, width, height);
-      winPanel.setDepth(100);
-
-      const winText = this.add.text(width / 2, height / 2 - 50, 'YOU WIN!', {
-        fontFamily: 'Arial, Helvetica, sans-serif',
-        fontSize: '64px',
-        fontStyle: 'bold',
-        color: '#ffaa00'
-      }).setOrigin(0.5).setDepth(101);
-      winText.setShadow(0, 4, '#7e3fc7', 8, true, true);
-
-      this.add.text(width / 2, height / 2 + 30, 'Congratulations on completing all levels!', {
-        fontFamily: 'Arial, Helvetica, sans-serif',
-        fontSize: '20px',
-        color: '#94a3b8'
-      }).setOrigin(0.5).setDepth(101);
-
-      this.time.delayedCall(2500, () => {
-        this.scene.start('MenuScene');
-      });
+      const W = this.cameras.main.width; const H = this.cameras.main.height;
+      const p = this.add.graphics().setDepth(100).setScrollFactor(0);
+      p.fillStyle(0x0d0025, 0.92); p.fillRect(0, 0, W, H);
+      this.add.text(W/2, H/2-60, '🏆 YOU WIN! 🏆', {
+        fontFamily: '"Space Grotesk", "Arial Black", sans-serif',
+        fontSize: '60px', fontStyle: 'bold', color: '#ffd700',
+        stroke: '#5b3a00', strokeThickness: 6,
+      }).setOrigin(0.5).setDepth(101).setScrollFactor(0);
+      this.add.text(W/2, H/2+20, 'All 5 Levels Completed!', {
+        fontFamily: '"Space Grotesk", Arial, sans-serif',
+        fontSize: '22px', color: '#c0a0ff',
+      }).setOrigin(0.5).setDepth(101).setScrollFactor(0);
+      this.time.delayedCall(3000, () => this.scene.start('MenuScene'));
     }
   }
 
   private handleDeath() {
     if (this.isPlayerDead) return;
     this.isPlayerDead = true;
-
-    // Flash screen red
     this.cameras.main.flash(150, 255, 0, 85);
-    
-    // Freeze player physics
     const body = this.player.body as Phaser.Physics.Arcade.Body;
     body.setEnable(false);
-
-    // Deduct life
     this.lives--;
-    this.livesText.setText(`❤️ LIVES: ${this.lives}`);
-
-    // Bounce UI text on impact
-    this.tweens.add({
-      targets: this.livesText,
-      scaleX: 1.3,
-      scaleY: 1.3,
-      duration: 100,
-      yoyo: true,
-      ease: 'Cubic.Out'
-    });
-
+    this.livesText.setText(`❤️ ×${this.lives}`);
+    this.tweens.add({ targets: this.livesText, scaleX: 1.3, scaleY: 1.3, duration: 100, yoyo: true, ease: 'Cubic.Out' });
     this.time.delayedCall(250, () => {
       if (this.lives > 0) {
-        this.restartLevel();
+        this.scene.restart({ level: this.currentLevel, lives: this.lives });
       } else {
-        // Game Over overlay
-        const width = this.cameras.main.width;
-        const height = this.cameras.main.height;
-
-        const overPanel = this.add.graphics();
-        overPanel.fillStyle(0x0f172a, 0.9);
-        overPanel.fillRect(0, 0, width, height);
-        overPanel.setDepth(100);
-
-        const overText = this.add.text(width / 2, height / 2, 'GAME OVER', {
-          fontFamily: 'Arial, Helvetica, sans-serif',
-          fontSize: '64px',
-          fontStyle: 'bold',
-          color: '#ff2277'
-        }).setOrigin(0.5).setDepth(101);
-        overText.setShadow(0, 4, '#7e3fc7', 8, true, true);
-
-        this.time.delayedCall(2000, () => {
-          this.scene.start('MenuScene');
-        });
+        const W = this.cameras.main.width; const H = this.cameras.main.height;
+        const p = this.add.graphics().setDepth(100).setScrollFactor(0);
+        p.fillStyle(0x0d0025, 0.9); p.fillRect(0, 0, W, H);
+        this.add.text(W/2, H/2, 'GAME OVER', {
+          fontFamily: '"Space Grotesk", "Arial Black", sans-serif',
+          fontSize: '64px', fontStyle: 'bold', color: '#ff2277',
+          stroke: '#4a0020', strokeThickness: 6,
+        }).setOrigin(0.5).setDepth(101).setScrollFactor(0);
+        this.time.delayedCall(2200, () => this.scene.start('MenuScene'));
       }
     });
   }
 
   private updatePortalLabel() {
     if (!this.portalLabel) return;
-    const remaining = this.totalCollectibles - this.collectedCount;
-    if (remaining > 0) {
-      this.portalLabel.setText(`🔒 LOCKED: ${remaining} LEFT`);
-      this.portalLabel.setColor('#ff3366');
+    const rem = this.totalCollectibles - this.collectedCount;
+    if (rem > 0) {
+      this.portalLabel.setText(`🔒 ${rem} left`).setColor('#ff3366');
     } else {
-      this.portalLabel.setText('🔓 PORTAL OPEN!');
-      this.portalLabel.setColor('#00ffff');
-      
-      this.tweens.add({
-        targets: this.portalLabel,
-        scaleX: 1.2,
-        scaleY: 1.2,
-        duration: 200,
-        yoyo: true,
-        ease: 'Bounce.Out'
-      });
+      this.portalLabel.setText('🔓 OPEN!').setColor('#00ffff');
+      this.tweens.add({ targets: this.portalLabel, scaleX: 1.2, scaleY: 1.2, duration: 200, yoyo: true, ease: 'Bounce.Out' });
     }
   }
 
   private createTutorialHints() {
-    const textStyle = {
-      fontFamily: 'Arial, Helvetica, sans-serif',
-      fontSize: '14px',
-      fontStyle: 'bold',
-      color: '#cbd5e1'
-    };
-
     if (this.currentLevel === 1) {
-      this.add.text(80, 420, '← / → or A/D to Run\nSPACE or W to Jump', textStyle)
-        .setOrigin(0, 0.5).setDepth(3).setAlpha(0.7);
-
-      this.add.text(480, 220, 'Collect Berries to\nPower the Portal!', textStyle)
-        .setOrigin(0.5, 0.5).setDepth(3).setAlpha(0.7).setAlign('center');
-        
-      this.add.text(900, 420, 'Enter the Portal\nto Escape!', textStyle)
-        .setOrigin(0.5, 0.5).setDepth(3).setAlpha(0.7).setAlign('center');
-    } else if (this.currentLevel === 2) {
-      this.add.text(280, 520, 'Jump against walls\nto Wall-Bounce!', textStyle)
-        .setOrigin(0.5, 0.5).setDepth(3).setAlpha(0.7).setAlign('center');
+      const ts = { fontFamily: 'Arial', fontSize: '13px', fontStyle: 'bold', color: '#c0b0ff' };
+      this.add.text(100, 480, '← / → Move\nSPACE Jump', ts).setDepth(3).setAlpha(0.75);
+      this.add.text(450, 340, 'Collect 🍓 Berries\nto open Portal!', ts).setOrigin(0.5).setDepth(3).setAlpha(0.75).setAlign('center');
+    }
+    if (this.currentLevel === 2) {
+      const ts = { fontFamily: 'Arial', fontSize: '13px', fontStyle: 'bold', color: '#c0b0ff' };
+      this.add.text(130, 560, 'Jump against\nwalls to bounce!', ts).setOrigin(0.5).setDepth(3).setAlpha(0.75).setAlign('center');
     }
   }
 
-  private restartLevel() {
-    this.scene.restart({ level: this.currentLevel, lives: this.lives });
-  }
-
   private createMobileControls() {
-    const height = this.cameras.main.height;
-    const width = this.cameras.main.width;
-    const btnRadius = 40;
+    const H = this.cameras.main.height;
+    const W = this.cameras.main.width;
+    const r = 40;
 
-    const drawBtn = (x: number, y: number, label: string, color = 0x1e293b, lineCol = 0xffffff) => {
-      const btn = this.add.container(x, y);
-      
+    const makeBtn = (x: number, y: number, label: string, col = 0x1e293b, border = 0xffffff) => {
+      const btn = this.add.container(x, y).setDepth(25).setScrollFactor(0);
       const bg = this.add.graphics();
-      bg.fillStyle(color, 0.55);
-      bg.fillCircle(0, 0, btnRadius);
-      bg.lineStyle(3, lineCol, 0.75);
-      bg.strokeCircle(0, 0, btnRadius);
-
-      const txt = this.add.text(0, 0, label, {
-        fontFamily: 'Arial, sans-serif',
-        fontSize: '32px',
-        fontStyle: 'bold',
-        color: '#ffffff'
-      }).setOrigin(0.5);
-
+      bg.fillStyle(col, 0.55); bg.fillCircle(0, 0, r);
+      bg.lineStyle(3, border, 0.75); bg.strokeCircle(0, 0, r);
+      const txt = this.add.text(0, 0, label, { fontFamily: 'Arial', fontSize: '32px', fontStyle: 'bold', color: '#ffffff' }).setOrigin(0.5);
       btn.add([bg, txt]);
-      btn.setDepth(25);
-      btn.setScrollFactor(0); // Lock to screen view camera
-
-      const hitArea = new Phaser.Geom.Circle(0, 0, btnRadius);
-      btn.setInteractive(hitArea, Phaser.Geom.Circle.Contains);
-      
+      btn.setInteractive(new Phaser.Geom.Circle(0, 0, r), Phaser.Geom.Circle.Contains);
       return btn;
     };
 
-    // Position controls nicely on bottom corners
-    this.leftButton = drawBtn(80, height - 90, '◀');
-    this.rightButton = drawBtn(200, height - 90, '▶');
-    
-    // Jump button is slightly larger and colored violet/orange
-    this.jumpButton = drawBtn(width - 90, height - 90, '▲', 0x7e3fc7, 0xffaa00);
+    this.leftButton = makeBtn(80, H - 90, '◀');
+    this.rightButton = makeBtn(200, H - 90, '▶');
+    this.jumpButton = makeBtn(W - 90, H - 90, '▲', 0x7e3fc7, 0xffaa00);
     this.jumpButton.setScale(1.15);
 
-    // Event handlers
     this.leftButton.on('pointerdown', () => { this.isTouchingLeft = true; this.leftButton.setScale(0.9); });
     this.leftButton.on('pointerup', () => { this.isTouchingLeft = false; this.leftButton.setScale(1.0); });
     this.leftButton.on('pointerout', () => { this.isTouchingLeft = false; this.leftButton.setScale(1.0); });
-
     this.rightButton.on('pointerdown', () => { this.isTouchingRight = true; this.rightButton.setScale(0.9); });
     this.rightButton.on('pointerup', () => { this.isTouchingRight = false; this.rightButton.setScale(1.0); });
     this.rightButton.on('pointerout', () => { this.isTouchingRight = false; this.rightButton.setScale(1.0); });
-
-    this.jumpButton.on('pointerdown', () => { 
-      this.touchJumpTriggered = true; 
-      this.jumpButton.setScale(1.05); 
-    });
-    this.jumpButton.on('pointerup', () => { 
-      this.jumpButton.setScale(1.15); 
-    });
-    this.jumpButton.on('pointerout', () => { 
-      this.jumpButton.setScale(1.15); 
-    });
+    this.jumpButton.on('pointerdown', () => { this.touchJumpTriggered = true; this.jumpButton.setScale(1.05); });
+    this.jumpButton.on('pointerup', () => { this.jumpButton.setScale(1.15); });
+    this.jumpButton.on('pointerout', () => { this.jumpButton.setScale(1.15); });
   }
 }
